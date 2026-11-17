@@ -1,419 +1,437 @@
-package io.rmiri.skeleton;
+package io.rmiri.skeleton
 
-import android.animation.Animator;
-import android.animation.ValueAnimator;
-import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.LinearGradient;
-import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.RectF;
-import android.graphics.Shader;
-import android.os.Build;
-import androidx.annotation.AttrRes;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
-import androidx.annotation.StyleRes;
-import android.util.AttributeSet;
-import android.util.Log;
-import android.util.Pair;
-import android.view.View;
-import android.view.ViewGroup;
-
-import java.util.ArrayList;
-
-import io.rmiri.skeleton.master.SkeletonMaster;
-import io.rmiri.skeleton.master.SkeletonModel;
-import io.rmiri.skeleton.utils.CLog;
-import io.rmiri.skeleton.utils.ColorUtils;
-
-import static io.rmiri.skeleton.master.SkeletonModel.ANIMATION_DIRECTION_BTT;
-import static io.rmiri.skeleton.master.SkeletonModel.ANIMATION_DIRECTION_LTR;
-import static io.rmiri.skeleton.master.SkeletonModel.ANIMATION_DIRECTION_RTL;
-import static io.rmiri.skeleton.master.SkeletonModel.ANIMATION_DIRECTION_TTB;
-import static io.rmiri.skeleton.master.SkeletonModel.ANIMATION_TYPE_ALPHA;
-import static io.rmiri.skeleton.master.SkeletonModel.ANIMATION_TYPE_GRADIENT;
-import static io.rmiri.skeleton.master.SkeletonModel.ANIMATION_TYPE_NON;
-import static io.rmiri.skeleton.master.SkeletonModel.SHAPE_TYPE_OVAL;
-import static io.rmiri.skeleton.master.SkeletonModel.SHAPE_TYPE_RECT;
-import static io.rmiri.skeleton.master.SkeletonModel.SHAPE_TYPE_TEXT;
-import static io.rmiri.skeleton.master.SkeletonModel.TEXT_SHAPE_LINE_LAST_WIDTH_FULL;
-import static io.rmiri.skeleton.master.SkeletonModel.TEXT_SHAPE_LINE_LAST_WIDTH_HALF;
-import static io.rmiri.skeleton.master.SkeletonModel.TEXT_SHAPE_LINE_LAST_WIDTH_QUARTER;
-import static io.rmiri.skeleton.master.SkeletonModel.TEXT_SHAPE_LINE_LAST_WIDTH_THREE_QUARTERS;
+import android.animation.Animator
+import android.animation.ValueAnimator
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.Shader
+import android.util.AttributeSet
+import android.util.Log
+import android.util.Pair
+import android.view.View
+import android.view.ViewGroup
+import androidx.annotation.AttrRes
+import androidx.annotation.StyleRes
+import androidx.core.view.isVisible
+import io.rmiri.skeleton.master.SkeletonMaster
+import io.rmiri.skeleton.master.SkeletonModel
+import io.rmiri.skeleton.master.SkeletonModel.DEFAULT_COLOR_BACKGROUND_MAIN
+import io.rmiri.skeleton.utils.ColorUtils
+import java.lang.ref.WeakReference
+import kotlin.math.abs
+import kotlin.math.min
 
 
 /**
  * Created by Rasoul Miri on 8/8/17.
  */
-
-public class SkeletonViewGroup extends SkeletonMaster {
-
-    ArrayList<SkeletonModel> skeletonModels = new ArrayList<>(); // Array for all children (add by java)
-    private ArrayList<SkeletonModel> skeletonModelsChildren;// Array for all children extend from SkeletonView (add by xml)
-
-    private SkeletonListener skeletonListener; // Listener
-
-    int parentId = -1; // This use for loop for x,y real
-
+class SkeletonViewGroup : SkeletonMaster {
+    private var skeletonModels: ArrayList<SkeletonModel>? =
+        ArrayList() // Array for all children (add by java)
+    private var parentId: Int = -1 // This use for loop for x,y real
+    private var skeletonModelsChildren: ArrayList<SkeletonModel>? =
+        null // Array for all children extend from SkeletonView (add by xml)
+    private var skeletonListener: WeakReference<SkeletonListener>? = null // Listener
+    private val mAnimatorListener by lazy {
+        AnimatorListener(WeakReference(this))
+    }
+    private val mAnimatorUpdateListener by lazy {
+        AnimatorUpdateListener(WeakReference(this))
+    }
     // Variable for draw canvas
-    private Paint paintGradient;
-    private Paint paintBackgroundViews;
-    private Canvas canvasGradientElement;
-    private Canvas canvasBackgroundElement;
-    private Bitmap bitmapGradientElement;
-    private Bitmap bitmapBackgroundElement;
-    private Path path = new Path();
+    private var paintGradient: Paint? = null
+    private var paintBackgroundViews: Paint? = null
+    private var canvasGradientElement: Canvas? = null
+    private var canvasBackgroundElement: Canvas? = null
+    private var bitmapGradientElement: Bitmap? = null
+    private var bitmapBackgroundElement: Bitmap? = null
+    private val path = Path()
 
     // Variable for gradient
-    private int[] gradientColors; // Is 3 colors
-    private float xStartGradient, yStartGradient, xEndGradient, yEndGradient;
+    private lateinit var gradientColors: IntArray // Is 3 colors
+    private var xStartGradient = 0f
+    private var yStartGradient = 0f
+    private var xEndGradient = 0f
+    private var yEndGradient = 0f
+
+    // 渐变着色器只构建一次，动画帧仅通过 Matrix 平移复用，避免每帧分配 native shader
+    private var shaderGradient: LinearGradient? = null
+    private var isShaderGradientDirty = true
+    private val gradientMatrix = Matrix()
 
     // Variable for fraction animation played
-    private ValueAnimator valueAnimator;
-    private float AnimationFractionMove = 0.0f;
-    private float AnimationFraction = 0.0f;
+    private var valueAnimator: ValueAnimator? = null
+    private var animationFractionMove = 0.0f
+    private var animationFraction = 0.0f
 
     // Variable for checking
-    private boolean isCanDraw = false;
-    private boolean isCanDrawFinishState = false;
-    private boolean isAnimationPlay = false;
-    private boolean isLastLoopAnimation = false;
+    private var isCanDraw = false
+    private var isCanDrawFinishState = false
+    private var isAnimationPlay = false
+    private var isLastLoopAnimation = false
 
-    public SkeletonViewGroup(@NonNull Context context) {
-        super(context);
-    }
+    //优化子view尺寸变化 骨架屏没有变化问题
+    private val onChildLayoutChangeListener =
+        OnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (left != oldLeft || top != oldTop || right != oldRight || oldBottom != bottom) {
+                if (v is SkeletonView) {
+                    skeletonModel(v)
+                    path.reset()
+                    paintGradient = null
+                    isShaderGradientDirty = true
+                }
+            }
+        }
 
-    public SkeletonViewGroup(@NonNull Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-    }
+    constructor(context: Context) : super(context)
 
-    public SkeletonViewGroup(@NonNull Context context, @Nullable AttributeSet attrs, @AttrRes int defStyleAttr) {
-        super(context, attrs, defStyleAttr);
-    }
+    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
 
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public SkeletonViewGroup(@NonNull Context context, @Nullable AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
-        super(context, attrs, defStyleAttr, defStyleRes);
-    }
+    constructor(context: Context, attrs: AttributeSet?, @AttrRes defStyleAttr: Int) : super(
+        context,
+        attrs,
+        defStyleAttr
+    )
 
-    @Override
-    public void init(Context context, @Nullable AttributeSet attrs) {
-        super.init(context, attrs);
+    constructor(
+        context: Context,
+        attrs: AttributeSet?,
+        @AttrRes defStyleAttr: Int,
+        @StyleRes defStyleRes: Int
+    ) : super(context, attrs, defStyleAttr, defStyleRes)
+
+    override fun init(context: Context, attrs: AttributeSet?) {
+        super.init(context, attrs)
 
         // Generate color 010 (color one transparent = 0.0 | color two transparent = 1.0 | color three transparent = 1.0 )
-        gradientColors = ColorUtils.generateColorTransparent010(skeletonModel.getColorHighLight(), skeletonModel.getColorBackgroundViews());
-
+        gradientColors = ColorUtils.generateColorTransparent010(
+            skeletonModel.colorHighLight,
+            skeletonModel.colorBackgroundViews
+        )
     }
 
-    @Override
-    protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        super.onLayout(changed, l, t, r, b);
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        super.onLayout(changed, l, t, r, b)
 
-        CLog.i("SkeletonGroup onLayout " + position);
+        if (changed) {
+            skeletonModelsChildren = null
+            path.reset()
+            paintGradient = null
+            isShaderGradientDirty = true
+        }
 
         if (skeletonModelsChildren == null
-                && skeletonModels != null
-                && skeletonModels.size() > 0
-                && skeletonModel.isShowSkeleton()) {
-
-            CLog.i("SkeletonGroup onLayout and skeletonModelsChildren == null ... " + position);
-
-            skeletonModelsChildren = new ArrayList<>();
+            && skeletonModels != null
+            && skeletonModels!!.size > 0
+            && skeletonModel.isShowSkeleton
+        ) {
+            skeletonModelsChildren = ArrayList()
 
             // set id for parent if not id
-            if (getParent() instanceof ViewGroup) {
-                parentId = ((ViewGroup) getParent()).getId();
+            if (parent is ViewGroup) {
+                parentId = (parent as ViewGroup).id
                 if (parentId == -1) {
-                    Log.e("SkeletonView", "Parent need to ID");
-                    ((ViewGroup) getParent()).setId(View.generateViewId());
-                    parentId = ((ViewGroup) getParent()).getId();
+                    Log.e("SkeletonView", "Parent need to ID")
+                    (parent as ViewGroup).id = generateViewId()
+                    parentId = (parent as ViewGroup).id
                 }
             }
 
 
-            for (SkeletonModel item : skeletonModels) {
-
-                if (item.getStartView() != null) {
-                    Log.i("SkeletonView", "use start and end views");
-                    item.setChildView(item.getStartView());
+            for (item in skeletonModels!!) {
+                if (item.startView != null) {
+                    item.childView = item.startView
                 }
 
                 // Set point X1,Y1,X2,Y2
-                float X1 = item.getChildView().getLeft();
-                float Y1 = item.getChildView().getTop();
-                float X2 = 0.0f;
-                float Y2 = 0.0f;
+                var X1 = item.childView.left.toFloat()
+                var Y1 = item.childView.top.toFloat()
+                var X2 = 0.0f
+                var Y2 = 0.0f
 
                 // Calculator X1,X2 to left and top SkeletonGroup view
-                Pair<Float, Float> pair = calculateXAndYReal(item.getChildView());
-                X1 += pair.first;
-                Y1 += pair.second;
+                val pair = calculateXAndYReal(item.childView)
+                X1 += pair.first!!
+                Y1 += pair.second!!
 
                 // Calculator padding size
-                float pTop;
-                float pLeft;
-                float pRight;
-                float pBottom;
+                var pTop: Float
+                var pLeft: Float
+                var pRight: Float
+                var pBottom: Float
 
-                if (item.getPadding() != Float.MIN_VALUE) {
-                    pTop = pLeft = pRight = pBottom = item.getPadding();
+                if (item.padding != Float.MIN_VALUE) {
+                    pBottom = item.padding
+                    pRight = pBottom
+                    pLeft = pRight
+                    pTop = pLeft
                 } else {
-                    pTop = item.getPaddingTop() != Float.MIN_VALUE ? item.getPaddingTop() : 0;
-                    pLeft = item.getPaddingLeft() != Float.MIN_VALUE ? item.getPaddingLeft() : 0;
-                    pRight = item.getPaddingRight() != Float.MIN_VALUE ? item.getPaddingRight() : 0;
-                    pBottom = item.getPaddingBottom() != Float.MIN_VALUE ? item.getPaddingBottom() : 0;
+                    pTop = if (item.paddingTop != Float.MIN_VALUE) item.paddingTop else 0f
+                    pLeft = if (item.paddingLeft != Float.MIN_VALUE) item.paddingLeft else 0f
+                    pRight = if (item.paddingRight != Float.MIN_VALUE) item.paddingRight else 0f
+                    pBottom = if (item.paddingBottom != Float.MIN_VALUE) item.paddingBottom else 0f
                 }
 
-                if (item.isMatchViewBoolean()) {
-                    X2 = X1 + getMeasuredWidth() - pRight;
-                    Y2 = Y1 + getMeasuredHeight() - pBottom;
+                if (item.isMatchViewBoolean) {
+                    X2 = X1 + measuredWidth - pRight
+                    Y2 = Y1 + measuredHeight - pBottom
                 } else {
-                    if (item.getEndView() != null) {
+                    if (item.endView != null) {
                         // Use startView and endView instead of real childView width
 
-                        float X1End = (float) item.getEndView().getLeft();
-                        float Y1End = (float) item.getEndView().getTop();
+                        val X1End = item.endView.left.toFloat()
+                        val Y1End = item.endView.top.toFloat()
 
-                        Pair<Float, Float> pairXY = calculateXAndYReal(item.getEndView());
-                        X2 = X1End + pairXY.first + item.getEndView().getMeasuredWidth() - pRight;
-                        Y2 = Y1End + pairXY.second + item.getEndView().getMeasuredHeight() - pBottom;
-                    } else if (item.getCustomWidth() != Float.MIN_VALUE) {
+                        val pairXY = calculateXAndYReal(item.endView)
+                        X2 = X1End + pairXY.first!! + item.endView.measuredWidth - pRight
+                        Y2 = Y1End + pairXY.second!! + item.endView.measuredHeight - pBottom
+                    } else if (item.customWidth != Float.MIN_VALUE) {
                         // Use customWidth and customHeight instead of real childView width and height
-                        X2 = X1 + item.getCustomWidth() - pRight;
-                        Y2 = Y1 + item.getCustomHeight() - pBottom;
+                        X2 = X1 + item.customWidth - pRight
+                        Y2 = Y1 + item.customHeight - pBottom
                     } else {
-                        X2 = X1 + (item.getChildView().getMeasuredWidth()) - pRight;
-                        Y2 = Y1 + (item.getChildView().getMeasuredHeight()) - pBottom;
+                        X2 = X1 + (item.childView.measuredWidth) - pRight
+                        Y2 = Y1 + (item.childView.measuredHeight) - pBottom
                     }
                 }
 
-                X1 = X1 + pLeft;
-                Y1 = Y1 + pTop;
+                X1 += pLeft
+                Y1 += pTop
 
-                item.setX1(X1);
-                item.setY1(Y1);
-                item.setX2(X2);
-                item.setY2(Y2);
+                item.x1 = X1
+                item.y1 = Y1
+                item.x2 = X2
+                item.y2 = Y2
 
-                skeletonModelsChildren.add(item);
-
+                skeletonModelsChildren?.add(item)
             }
-            if (skeletonModel.isAutoStartAnimation()) {
-                setupInitialAnimation();
+            if (skeletonModel.isAutoStartAnimation) {
+                setupInitialAnimation()
             }
-
-        } else if (skeletonModelsChildren == null && skeletonModel.isShowSkeleton()) {
-
-            CLog.i("SkeletonGroup onLayout and skeletonModelsChildren == null ... " + position);
+        } else if (skeletonModelsChildren == null && skeletonModel.isShowSkeleton) {
             // Add all children extend from SkeletonView
+            skeletonModelsChildren = ArrayList()
 
-            skeletonModelsChildren = new ArrayList<>();
-
-            for (View child : getAllChildren(getChildAt(0))) {
-
-                if (child != null && child instanceof SkeletonView) {
-
-                    SkeletonModel item = ((SkeletonView) child).getSkeletonModel();
-
-                    // Set point X1,Y1,X2,Y2
-                    float X1 = child.getLeft();
-                    float Y1 = child.getTop();
-                    float X2 = 0.0f;
-                    float Y2 = 0.0f;
-
-                    // Calculator X1,X2 to left and top SkeletonGroup view
-                    View parent = (View) child.getParent();
-                    while (parent != null && !(parent instanceof SkeletonViewGroup)) {
-                        X1 += parent.getLeft();
-                        Y1 += parent.getTop();
-                        parent = (View) parent.getParent();
-                    }
-
-                    // Calculator padding size
-                    float pTop;
-                    float pLeft;
-                    float pRight;
-                    float pBottom;
-
-                    if (item.getPadding() != Integer.MIN_VALUE) {
-                        pTop = pLeft = pRight = pBottom = item.getPadding();
-                    } else {
-                        pTop = item.getPaddingTop() != Integer.MIN_VALUE ? item.getPaddingTop() : 0;
-                        pLeft = item.getPaddingLeft() != Integer.MIN_VALUE ? item.getPaddingLeft() : 0;
-                        pRight = item.getPaddingRight() != Integer.MIN_VALUE ? item.getPaddingRight() : 0;
-                        pBottom = item.getPaddingBottom() != Integer.MIN_VALUE ? item.getPaddingBottom() : 0;
-                    }
-
-                    X2 = X1 + child.getMeasuredWidth() - pRight;
-                    Y2 = Y1 + child.getMeasuredHeight() - pBottom;
-                    X1 = X1 + pLeft;
-                    Y1 = Y1 + pTop;
-
-                    item.setX1(X1);
-                    item.setY1(Y1);
-                    item.setX2(X2);
-                    item.setY2(Y2);
-
-
-                    skeletonModelsChildren.add(item);
+            for (child in getAllChildren(getChildAt(0))) {
+                if (child != null && child is SkeletonView) {
+                    child.addOnLayoutChangeListener(onChildLayoutChangeListener)
+                    val item = skeletonModel(child)
+                    item.childView = child
+                    skeletonModelsChildren?.add(item)
                 }
             }
-            if (skeletonModel.isAutoStartAnimation()) {
-                setupInitialAnimation();
+            if (skeletonModel.isAutoStartAnimation) {
+                setupInitialAnimation()
             }
         }
     }
 
+    private fun skeletonModel(child: SkeletonView): SkeletonModel {
+        val item = child.skeletonModel
 
-    private Pair<Float, Float> calculateXAndYReal(View view) {
+        // Set point X1,Y1,X2,Y2
+        var X1 = child.getLeft().toFloat()
+        var Y1 = child.getTop().toFloat()
+        var X2 = 0.0f
+        var Y2 = 0.0f
 
-        if (view == null) {
-            Log.i("SkeletonView", "view is null");
-            return new Pair(0f, 0f);
+        // Calculator X1,X2 to left and top SkeletonGroup view
+        var parent = child.parent as View
+        while (parent !is SkeletonViewGroup) {
+            X1 += parent.left.toFloat()
+            Y1 += parent.top.toFloat()
+            parent = parent.parent as View
         }
-        float X = 0.0f;
-        float Y = 0.0f;
+
+        // Calculator padding size
+        var pTop: Float
+        var pLeft: Float
+        var pRight: Float
+        var pBottom: Float
+
+        if (item.padding.toInt() != Int.MIN_VALUE) {
+            pBottom = item.padding
+            pRight = pBottom
+            pLeft = pRight
+            pTop = pLeft
+        } else {
+            pTop = if (item.paddingTop.toInt() != Int.MIN_VALUE) item.paddingTop else 0f
+            pLeft =
+                if (item.paddingLeft.toInt() != Int.MIN_VALUE) item.paddingLeft else 0f
+            pRight =
+                if (item.paddingRight.toInt() != Int.MIN_VALUE) item.paddingRight else 0f
+            pBottom =
+                if (item.paddingBottom.toInt() != Int.MIN_VALUE) item.paddingBottom else 0f
+        }
+
+        X2 = X1 + child.getMeasuredWidth() - pRight
+        Y2 = Y1 + child.getMeasuredHeight() - pBottom
+        X1 = X1 + pLeft
+        Y1 = Y1 + pTop
+
+        item.x1 = X1
+        item.y1 = Y1
+        item.x2 = X2
+        item.y2 = Y2
+        return item
+    }
+
+
+    private fun calculateXAndYReal(view: View?): Pair<Float, Float> {
+        if (view == null) {
+            Log.i("SkeletonView", "view is null")
+            return Pair(0f, 0f)
+        }
+        var X = 0.0f
+        var Y = 0.0f
 
         // Calculator X1,Y1 to left and top SkeletonGroup view
-        View parent = (View) view.getParent();
-        while (parent != null && parent.getId() != parentId) {
-            X += parent.getLeft();
-            Y += parent.getTop();
-            parent = (View) parent.getParent();
+        var parent = view.parent as View
+        while (parent.id != parentId) {
+            X += parent.left.toFloat()
+            Y += parent.top.toFloat()
+            parent = parent.parent as View
         }
 
         // remove padding left and top parent
-        View parentViewMaster = ((View) getParent());
-        X = X - parentViewMaster.getPaddingLeft();
-        Y = Y - parentViewMaster.getPaddingTop();
+        val parentViewMaster = (getParent() as View)
+        X -= parentViewMaster.paddingLeft
+        Y -= parentViewMaster.paddingTop
 
 
-        return new Pair(X, Y);
-
+        return Pair(X, Y)
     }
 
-    @Override
-    protected void dispatchDraw(Canvas canvas) {
-        super.dispatchDraw(canvas);
-
+    override fun dispatchDraw(canvas: Canvas) {
+        // 骨架激活期间子View仅作布局占位(Space/无背景容器)没有可见内容，
+        // 跳过整棵子树的绘制分发，避免每帧遍历几十个View
         if (isCanDraw) {
-
             // Just once run this code
             // Calculate bound child for draw
-            if (paintGradient == null) {
 
+            if (paintGradient == null) {
                 //paint
-                paintBackgroundViews = new Paint(Paint.ANTI_ALIAS_FLAG);
-                paintBackgroundViews.setStyle(Paint.Style.FILL);
-                paintBackgroundViews.setColor(skeletonModel.getColorBackgroundViews());
-                paintGradient = new Paint(Paint.ANTI_ALIAS_FLAG);
-                paintGradient.setStyle(Paint.Style.FILL);
+
+                //尺寸变化重进此分支时重置path，避免形状重复累积
+                path.reset()
+                paintBackgroundViews = Paint(Paint.ANTI_ALIAS_FLAG)
+                paintBackgroundViews?.style = Paint.Style.FILL
+                paintBackgroundViews?.color = skeletonModel.colorBackgroundViews
+                paintGradient = Paint(Paint.ANTI_ALIAS_FLAG)
+                paintGradient?.style = Paint.Style.FILL
 
                 //canvas
-                Bitmap.Config bitmapConfig = Bitmap.Config.ALPHA_8;
-                bitmapBackgroundElement = Bitmap.createBitmap(getWidth(), getHeight(), bitmapConfig);
-                canvasBackgroundElement = new Canvas(bitmapBackgroundElement);
-                bitmapGradientElement = Bitmap.createBitmap(getWidth(), getHeight(), bitmapConfig);
-                canvasGradientElement = new Canvas(bitmapGradientElement);
+                val bitmapConfig = Bitmap.Config.ALPHA_8
+                bitmapBackgroundElement = Bitmap.createBitmap(width, height, bitmapConfig)
+                canvasBackgroundElement = Canvas(bitmapBackgroundElement!!)
+                bitmapGradientElement = Bitmap.createBitmap(width, height, bitmapConfig)
+                canvasGradientElement = Canvas(bitmapGradientElement!!)
 
-                for (int i = 0; i < skeletonModelsChildren.size(); i++) {
-
-                    SkeletonModel skeletonAttributeChild = skeletonModelsChildren.get(i);
-
-                    if (skeletonAttributeChild.getShapeType() == SHAPE_TYPE_RECT) {
+                for (i in skeletonModelsChildren!!.indices) {
+                    val skeletonAttributeChild = skeletonModelsChildren!![i]
+                    if (skeletonAttributeChild.childView?.isVisible == false) {
+                        continue
+                    }
+                    if (skeletonAttributeChild.shapeType == SkeletonModel.SHAPE_TYPE_RECT) {
                         // Rectangle
-                        RectF rectangleRect = new RectF(skeletonAttributeChild.getX1(), skeletonAttributeChild.getY1(), skeletonAttributeChild.getX2(), skeletonAttributeChild.getY2());
-                        float[] cornerRadius = generateCornerRadius(rectangleRect, skeletonAttributeChild);
-                        path.addRoundRect(rectangleRect, cornerRadius, Path.Direction.CW);
-                    } else if (skeletonAttributeChild.getShapeType() == SHAPE_TYPE_OVAL) {
+                        val rectangleRect = RectF(
+                            skeletonAttributeChild.x1,
+                            skeletonAttributeChild.y1,
+                            skeletonAttributeChild.x2,
+                            skeletonAttributeChild.y2
+                        )
+                        val cornerRadius =
+                            generateCornerRadius(rectangleRect, skeletonAttributeChild)
+                        path.addRoundRect(rectangleRect, cornerRadius, Path.Direction.CW)
+                    } else if (skeletonAttributeChild.shapeType == SkeletonModel.SHAPE_TYPE_OVAL) {
                         // Oval
-                        RectF ovalRect = new RectF(skeletonAttributeChild.getX1(), skeletonAttributeChild.getY1(), skeletonAttributeChild.getX2(), skeletonAttributeChild.getY2());
-                        path.addOval(ovalRect, Path.Direction.CW);
-                    } else if (skeletonAttributeChild.getShapeType() == SHAPE_TYPE_TEXT) {
+                        val ovalRect = RectF(
+                            skeletonAttributeChild.x1,
+                            skeletonAttributeChild.y1,
+                            skeletonAttributeChild.x2,
+                            skeletonAttributeChild.y2
+                        )
+                        path.addOval(ovalRect, Path.Direction.CW)
+                    } else if (skeletonAttributeChild.shapeType == SkeletonModel.SHAPE_TYPE_TEXT) {
                         // Text
 
 
-                        float lineHeight = skeletonAttributeChild.getTextShapeLineHeight();
-                        float lineSpaceVertical = skeletonAttributeChild.getTextShapeLineSpaceVertical();
+                        val lineHeight = skeletonAttributeChild.textShapeLineHeight.toFloat()
+                        val lineSpaceVertical =
+                            skeletonAttributeChild.textShapeLineSpaceVertical.toFloat()
 
-                        int lineNumber = skeletonAttributeChild.getTextShapeLineNumber();
+                        var lineNumber = skeletonAttributeChild.textShapeLineNumber
                         if (lineNumber == 0) {
-                            lineNumber = (int) ((skeletonAttributeChild.getY2() - skeletonAttributeChild.getY1())
-                                    / (lineHeight + lineSpaceVertical));
+                            lineNumber = ((skeletonAttributeChild.y2 - skeletonAttributeChild.y1)
+                                    / (lineHeight + lineSpaceVertical)).toInt()
                         }
-                        CLog.i("line number  " + lineNumber);
-                        for (int j = 0; j < lineNumber; j++) {
-
-                            RectF rectangleRect;
-                            float newY1, newY2;
-                            float newX1 = skeletonAttributeChild.getX1();
-                            float newX2 = skeletonAttributeChild.getX2();
+                        for (j in 0 until lineNumber) {
+                            var rectangleRect: RectF
+                            var newX1 = skeletonAttributeChild.x1
+                            var newX2 = skeletonAttributeChild.x2
 
                             // Y1
-                            if (j == 0) {
+                            val newY1 = if (j == 0) {
                                 // First line
-                                newY1 = skeletonAttributeChild.getY1();
+                                skeletonAttributeChild.y1
                             } else {
                                 // Other line
-                                newY1 = skeletonAttributeChild.getY1()
+                                (skeletonAttributeChild.y1
                                         + (lineHeight * j) // height children previous
-                                        + (lineSpaceVertical * j);// space vertical children previous
+                                        + (lineSpaceVertical * j)) // space vertical children previous
                             }
 
                             // Y2
-                            newY2 = skeletonAttributeChild.getY1()
+                            val newY2 = (skeletonAttributeChild.y1
                                     + (lineHeight * (j + 1)) // height children previous
-                                    + (lineSpaceVertical * j);// space vertical children previous
+                                    + (lineSpaceVertical * j)) // space vertical children previous
 
 
                             // X1,X2 just for last line
                             if (j == lineNumber - 1) {
+                                val quarterWidth =
+                                    (skeletonAttributeChild.x2 - skeletonAttributeChild.x1) / 4 //quarter width 1 line
 
-                                float quarterWidth = (skeletonAttributeChild.getX2() - skeletonAttributeChild.getX1()) / 4;//quarter width 1 line
+                                when (skeletonAttributeChild.textShapeLineLastWidth) {
+                                    SkeletonModel.TEXT_SHAPE_LINE_LAST_WIDTH_FULL -> {}
+                                    SkeletonModel.TEXT_SHAPE_LINE_LAST_WIDTH_THREE_QUARTERS -> if (skeletonModel.animationDirection == SkeletonModel.ANIMATION_DIRECTION_RTL) {
+                                        newX1 = skeletonAttributeChild.x1 + quarterWidth
+                                    } else {
+                                        newX2 = skeletonAttributeChild.x2 - quarterWidth
+                                    }
 
-                                switch (skeletonAttributeChild.getTextShapeLineLastWidth()) {
-                                    case TEXT_SHAPE_LINE_LAST_WIDTH_FULL:
-                                        // No change X1 and X2
-                                        break;
-                                    case TEXT_SHAPE_LINE_LAST_WIDTH_THREE_QUARTERS:
-                                        if (skeletonModel.getAnimationDirection() == ANIMATION_DIRECTION_RTL) {
-                                            newX1 = skeletonAttributeChild.getX1() + quarterWidth;
-                                        } else {
-                                            newX2 = skeletonAttributeChild.getX2() - quarterWidth;
-                                        }
-                                        break;
-                                    case TEXT_SHAPE_LINE_LAST_WIDTH_HALF:
-                                        if (skeletonModel.getAnimationDirection() == ANIMATION_DIRECTION_RTL) {
-                                            newX1 = skeletonAttributeChild.getX1() + (2 * quarterWidth);
-                                        } else {
-                                            newX2 = skeletonAttributeChild.getX2() - (2 * quarterWidth);
-                                        }
-                                        break;
-                                    case TEXT_SHAPE_LINE_LAST_WIDTH_QUARTER:
-                                        if (skeletonModel.getAnimationDirection() == ANIMATION_DIRECTION_RTL) {
-                                            newX1 = skeletonAttributeChild.getX1() + (3 * quarterWidth);
-                                        } else {
-                                            newX2 = skeletonAttributeChild.getX2() - (3 * quarterWidth);
-                                        }
-                                        break;
+                                    SkeletonModel.TEXT_SHAPE_LINE_LAST_WIDTH_HALF -> if (skeletonModel.animationDirection == SkeletonModel.ANIMATION_DIRECTION_RTL) {
+                                        newX1 = skeletonAttributeChild.x1 + (2 * quarterWidth)
+                                    } else {
+                                        newX2 = skeletonAttributeChild.x2 - (2 * quarterWidth)
+                                    }
+
+                                    SkeletonModel.TEXT_SHAPE_LINE_LAST_WIDTH_QUARTER -> if (skeletonModel.animationDirection == SkeletonModel.ANIMATION_DIRECTION_RTL) {
+                                        newX1 = skeletonAttributeChild.x1 + (3 * quarterWidth)
+                                    } else {
+                                        newX2 = skeletonAttributeChild.x2 - (3 * quarterWidth)
+                                    }
                                 }
                             }
 
                             // Draw text line
-                            rectangleRect = new RectF(newX1, newY1, newX2, newY2);
-                            float[] cornerRadius = generateCornerRadius(rectangleRect, skeletonAttributeChild);
-                            path.addRoundRect(rectangleRect, cornerRadius, Path.Direction.CW);
+                            rectangleRect = RectF(newX1, newY1, newX2, newY2)
+                            val cornerRadius =
+                                generateCornerRadius(rectangleRect, skeletonAttributeChild)
+                            path.addRoundRect(rectangleRect, cornerRadius, Path.Direction.CW)
                         }
                     }
 
 
                     // Draw bitmap on canvas
-                    canvasBackgroundElement.drawPath(path, paintBackgroundViews);
-                    canvasGradientElement.drawPath(path, paintBackgroundViews);
-
+                    canvasBackgroundElement?.drawPath(path, paintBackgroundViews!!)
+                    canvasGradientElement?.drawPath(path, paintBackgroundViews!!)
                 }
             }
 
@@ -421,309 +439,402 @@ public class SkeletonViewGroup extends SkeletonMaster {
             // Main draw
             if (isCanDrawFinishState) {
                 // Finish draw
-                switch (skeletonModel.getAnimationFinishType()) {
-                    case ANIMATION_TYPE_ALPHA:
-
+                when (skeletonModel.animationFinishType) {
+                    SkeletonModel.ANIMATION_TYPE_ALPHA -> {
                         // Draw background total view with alpha
-                        drawBackgroundTotal(canvas, ColorUtils.convertColorToTransparent(skeletonModel.getColorBackgroundMain(), 1.0f - AnimationFraction));
+                        drawBackgroundTotal(
+                            canvas,
+                            ColorUtils.convertColorToTransparent(
+                                skeletonModel.colorBackgroundMain,
+                                1.0f - animationFraction
+                            )
+                        )
 
-                        paintBackgroundViews.setAlpha((int) (255 * (1.0f - AnimationFraction)));
-                        canvas.drawBitmap(bitmapBackgroundElement, 0, 0, paintBackgroundViews);
+                        paintBackgroundViews?.alpha = (255 * (1.0f - animationFraction)).toInt()
+                        canvas.drawBitmap(bitmapBackgroundElement!!, 0f, 0f, paintBackgroundViews)
+                    }
 
-                        break;
-                    case ANIMATION_TYPE_GRADIENT:
-
+                    SkeletonModel.ANIMATION_TYPE_GRADIENT -> {
                         // Draw background total view with alpha
                         // drawBackgroundTotal(canvas, ColorUtils.convertColorToTransparent(skeletonModel.getColorBackgroundMain(), 1.0f - AnimationFraction));
-
-                        if (AnimationFractionMove == 1f || AnimationFractionMove == -1f) {
-                            drawBackgroundTotal(canvas, skeletonModel.getColorBackgroundMain());//draw background total
-                            canvas.drawBitmap(bitmapBackgroundElement, 0, 0, paintBackgroundViews);//draw background view
+                        if (animationFractionMove == 1f || animationFractionMove == -1f) {
+                            drawBackgroundTotal(
+                                canvas,
+                                skeletonModel.colorBackgroundMain
+                            ) //draw background total
+                            canvas.drawBitmap(
+                                bitmapBackgroundElement!!,
+                                0f,
+                                0f,
+                                paintBackgroundViews
+                            ) //draw background view
                         }
 
-                        generatePositionGradientFromDirectionAnimation();
-                        paintGradient.setShader(new LinearGradient(xStartGradient, yStartGradient, xEndGradient, yEndGradient
-                                , gradientColors
-                                , new float[]{0f, 0.4f, 0.8f}
-                                , Shader.TileMode.CLAMP));
+                        generatePositionGradientFromDirectionAnimation()
+                        applyGradientShader()
 
-                        canvas.drawBitmap(bitmapGradientElement, 0, 0, paintGradient);
-                        break;
+                        canvas.drawBitmap(bitmapGradientElement!!, 0f, 0f, paintGradient)
+                    }
                 }
-
             } else {
                 // Normal draw
 
-                drawBackgroundTotal(canvas, skeletonModel.getColorBackgroundMain());//draw background total
-                canvas.drawBitmap(bitmapBackgroundElement, 0, 0, paintBackgroundViews);//draw background view
-                switch (skeletonModel.getAnimationNormalType()) {
+                drawBackgroundTotal(
+                    canvas,
+                    skeletonModel.colorBackgroundMain
+                ) //draw background total
+                canvas.drawBitmap(
+                    bitmapBackgroundElement!!,
+                    0f,
+                    0f,
+                    paintBackgroundViews
+                ) //draw background view
+                when (skeletonModel.animationNormalType) {
+                    SkeletonModel.ANIMATION_TYPE_ALPHA -> {
+                        paintGradient?.color = ColorUtils.convertColorToTransparent(
+                            skeletonModel.colorHighLight, abs(animationFractionMove.toDouble())
+                                .toFloat()
+                        )
 
-                    case ANIMATION_TYPE_ALPHA:
+                        canvas.drawBitmap(bitmapGradientElement!!, 0f, 0f, paintGradient)
+                    }
 
-                        float alpha = 0.0f;
-//                        if (AnimationFractionMove >= 0) {
-//                            alpha = AnimationFractionMove;
-//                        } else {
-//                            alpha = AnimationFractionMove + 1;
-//                        }
-                        CLog.i(alpha + "");
-                        paintGradient.setColor(ColorUtils.convertColorToTransparent(skeletonModel.getColorHighLight(), Math.abs(AnimationFractionMove)));
+                    SkeletonModel.ANIMATION_TYPE_GRADIENT -> {
+                        generatePositionGradientFromDirectionAnimation()
+                        applyGradientShader()
 
-                        canvas.drawBitmap(bitmapGradientElement, 0, 0, paintGradient);
-
-                        break;
-                    case ANIMATION_TYPE_GRADIENT:
-
-                        generatePositionGradientFromDirectionAnimation();
-                        paintGradient.setShader(new LinearGradient(xStartGradient, yStartGradient, xEndGradient, yEndGradient
-                                , gradientColors
-                                , new float[]{0f, 0.4f, 0.8f}
-                                , Shader.TileMode.CLAMP));
-
-                        canvas.drawBitmap(bitmapGradientElement, 0, 0, paintGradient);
-
-                        break;
-                }
-            }
-        }
-    }
-
-
-    private float[] generateCornerRadius(RectF rectangleRect, SkeletonModel skeletonAttributeChild) {
-
-        // Calculator cornerRadius size
-        float cornerRadiusTopLeft;
-        float cornerRadiusTopRight;
-        float cornerRadiusBottomLRight;
-        float cornerRadiusBottomLeft;
-
-        if (skeletonAttributeChild.getCornerRadius() != Integer.MIN_VALUE) {
-            cornerRadiusTopLeft = cornerRadiusTopRight = cornerRadiusBottomLRight = cornerRadiusBottomLeft = getCornerRadius(rectangleRect, skeletonAttributeChild.getCornerRadius());
-        } else {
-            cornerRadiusTopLeft = skeletonAttributeChild.getCornerRadiusTopLeft() != Integer.MIN_VALUE ? getCornerRadius(rectangleRect, skeletonAttributeChild.getCornerRadiusTopLeft()) : 0;
-            cornerRadiusTopRight = skeletonAttributeChild.getCornerRadiusTopRight() != Integer.MIN_VALUE ? getCornerRadius(rectangleRect, skeletonAttributeChild.getCornerRadiusTopRight()) : 0;
-            cornerRadiusBottomLRight = skeletonAttributeChild.getCornerRadiusBottomLRight() != Integer.MIN_VALUE ? getCornerRadius(rectangleRect, skeletonAttributeChild.getCornerRadiusBottomLRight()) : 0;
-            cornerRadiusBottomLeft = skeletonAttributeChild.getCornerRadiusBottomLeft() != Integer.MIN_VALUE ? getCornerRadius(rectangleRect, skeletonAttributeChild.getCornerRadiusBottomLeft()) : 0;
-        }
-
-        return new float[]{cornerRadiusTopLeft, cornerRadiusTopLeft, cornerRadiusTopRight, cornerRadiusTopRight, cornerRadiusBottomLRight, cornerRadiusBottomLRight, cornerRadiusBottomLeft, cornerRadiusBottomLeft};
-
-    }
-
-    private float getCornerRadius(RectF rectangleRect, float initCornerRadius) {
-        return Math.min(Math.min(rectangleRect.width(), rectangleRect.height()) / 2f, initCornerRadius);
-    }
-
-    private void drawBackgroundTotal(Canvas canvas, int color) {
-        // For transparent no need draw color
-        if (color != android.R.color.transparent) {
-            canvas.drawColor(color);// Background total view
-        }
-    }
-
-    private void generatePositionGradientFromDirectionAnimation() {
-
-        // Check direction and set x,y start and end for gradient
-        switch (skeletonModel.getAnimationDirection()) {
-            case ANIMATION_DIRECTION_LTR: {
-                float offset = getWidth() * AnimationFractionMove;
-                xStartGradient = offset;
-                yStartGradient = 0;
-                xEndGradient = offset + getWidth();
-                yEndGradient = 0;
-                break;
-            }
-            case ANIMATION_DIRECTION_RTL: {
-                float offset = getWidth() * AnimationFractionMove;
-                xStartGradient = offset;
-                yStartGradient = 0;
-                xEndGradient = offset + getWidth();
-                yEndGradient = 0;
-                break;
-            }
-            case ANIMATION_DIRECTION_TTB: {
-                float offset = getHeight() * AnimationFractionMove;
-                xStartGradient = 0;
-                yStartGradient = offset;
-                xEndGradient = 0;
-                yEndGradient = offset + getHeight();
-                break;
-            }
-            case ANIMATION_DIRECTION_BTT: {
-                float offset = getHeight() * AnimationFractionMove;
-                xStartGradient = 0;
-                yStartGradient = offset;
-                xEndGradient = 0;
-                yEndGradient = offset + getHeight();
-                break;
-            }
-        }
-    }
-
-
-    private void setupInitialAnimation() {
-
-        if (skeletonModelsChildren != null && skeletonModelsChildren.size() > 0) {
-            isCanDraw = true;
-            isAnimationPlay = true;
-            setHoldTouchEventsFromChildren(true); // Enable Hold touchEvents from this and children
-        } else {
-            // SkeletonGroup no child extend from skeletonView
-            return;
-        }
-
-        // Checking direction animation for generate value star and end move animation fraction
-        float valueAnimationMoveFractionStart = 0;
-        float valueAnimationMoveFractionEnd = 0;
-        switch (skeletonModel.getAnimationDirection()) {
-            case ANIMATION_DIRECTION_LTR:
-                valueAnimationMoveFractionStart = -1;
-                valueAnimationMoveFractionEnd = 1;
-                break;
-            case ANIMATION_DIRECTION_RTL:
-                valueAnimationMoveFractionStart = 1;
-                valueAnimationMoveFractionEnd = -1;
-                break;
-            case ANIMATION_DIRECTION_TTB:
-                valueAnimationMoveFractionStart = -1;
-                valueAnimationMoveFractionEnd = 1;
-                break;
-            case ANIMATION_DIRECTION_BTT:
-                valueAnimationMoveFractionStart = 1;
-                valueAnimationMoveFractionEnd = -1;
-                break;
-        }
-
-        // Initial animation
-        valueAnimator = ValueAnimator.ofFloat(valueAnimationMoveFractionStart, valueAnimationMoveFractionEnd);
-        valueAnimator.setDuration(skeletonModel.getAnimationDuration());
-        valueAnimator.setRepeatCount(ValueAnimator.INFINITE);
-        valueAnimator.setRepeatMode(ValueAnimator.RESTART);
-
-        valueAnimator.addListener(new Animator.AnimatorListener() {
-            @Override
-            public void onAnimationStart(Animator animation) {
-
-            }
-
-            @Override
-            public void onAnimationEnd(Animator animation) {
-            }
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-
-            }
-
-            @Override
-            public void onAnimationRepeat(Animator animation) {
-                CLog.i("SkeletonGroup onAnimationRepeat " + position);
-
-                if (isCanDrawFinishState) {
-                    CLog.i("SkeletonGroup isCanDrawFinishState " + position);
-                    setupFinishingAnimation();
-                }
-
-
-                if (isLastLoopAnimation) {
-                    // Last repeat animation and start finish animation
-                    CLog.i("SkeletonGroup isLastLoopAnimation " + position);
-                    if (skeletonModel.getAnimationFinishType() == ANIMATION_TYPE_NON) {
-                        setupFinishingAnimation();
-                    } else {
-                        isLastLoopAnimation = false;
-                        isCanDrawFinishState = true;
-                        // Change color 011 (color one transparent = 0.0 | color two transparent = 1.0 | color three transparent = 1.0 )
-                        gradientColors = ColorUtils.generateColorTransparent011(skeletonModel.getColorHighLight(), skeletonModel.getColorBackgroundViews());
+                        canvas.drawBitmap(bitmapGradientElement!!, 0f, 0f, paintGradient)
                     }
                 }
             }
-        });
-
-        valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                AnimationFractionMove = (float) (Float) animation.getAnimatedValue();
-                AnimationFraction = animation.getAnimatedFraction();
-                invalidate();
-            }
-        });
-
-        valueAnimator.start();
-
-        // Call start animation in listener
-        if (skeletonListener != null)
-            skeletonListener.onStartAnimation();
-
+        } else {
+            super.dispatchDraw(canvas)
+        }
     }
 
 
-    private void setupFinishingAnimation() {
+    private fun generateCornerRadius(
+        rectangleRect: RectF,
+        skeletonAttributeChild: SkeletonModel
+    ): FloatArray {
+        // Calculator cornerRadius size
 
-        isAnimationPlay = false;
-        isCanDraw = false;
-        isLastLoopAnimation = false;
-        isCanDrawFinishState = false;
+        val cornerRadiusTopLeft: Float
+        val cornerRadiusTopRight: Float
+        val cornerRadiusBottomLRight: Float
+        val cornerRadiusBottomLeft: Float
+
+        if (skeletonAttributeChild.cornerRadius != Int.MIN_VALUE) {
+            cornerRadiusBottomLeft =
+                getCornerRadius(rectangleRect, skeletonAttributeChild.cornerRadius.toFloat())
+            cornerRadiusBottomLRight = cornerRadiusBottomLeft
+            cornerRadiusTopRight = cornerRadiusBottomLRight
+            cornerRadiusTopLeft = cornerRadiusTopRight
+        } else {
+            cornerRadiusTopLeft =
+                if (skeletonAttributeChild.cornerRadiusTopLeft != Int.MIN_VALUE) getCornerRadius(
+                    rectangleRect,
+                    skeletonAttributeChild.cornerRadiusTopLeft.toFloat()
+                ) else 0f
+            cornerRadiusTopRight =
+                if (skeletonAttributeChild.cornerRadiusTopRight != Int.MIN_VALUE) getCornerRadius(
+                    rectangleRect,
+                    skeletonAttributeChild.cornerRadiusTopRight.toFloat()
+                ) else 0f
+            cornerRadiusBottomLRight =
+                if (skeletonAttributeChild.cornerRadiusBottomLRight != Int.MIN_VALUE) getCornerRadius(
+                    rectangleRect,
+                    skeletonAttributeChild.cornerRadiusBottomLRight.toFloat()
+                ) else 0f
+            cornerRadiusBottomLeft =
+                if (skeletonAttributeChild.cornerRadiusBottomLeft != Int.MIN_VALUE) getCornerRadius(
+                    rectangleRect,
+                    skeletonAttributeChild.cornerRadiusBottomLeft.toFloat()
+                ) else 0f
+        }
+
+        return floatArrayOf(
+            cornerRadiusTopLeft,
+            cornerRadiusTopLeft,
+            cornerRadiusTopRight,
+            cornerRadiusTopRight,
+            cornerRadiusBottomLRight,
+            cornerRadiusBottomLRight,
+            cornerRadiusBottomLeft,
+            cornerRadiusBottomLeft
+        )
+    }
+
+    private fun getCornerRadius(rectangleRect: RectF, initCornerRadius: Float): Float {
+        return min(
+            (min(
+                rectangleRect.width().toDouble(),
+                rectangleRect.height().toDouble()
+            ) / 2f), initCornerRadius.toDouble()
+        ).toFloat()
+    }
+
+    private fun drawBackgroundTotal(canvas: Canvas, color: Int) {
+        // For transparent no need draw color
+        if (color != DEFAULT_COLOR_BACKGROUND_MAIN) {
+            canvas.drawColor(color) // Background total view
+        }
+    }
+
+    private fun generatePositionGradientFromDirectionAnimation() {
+        // Check direction and set x,y start and end for gradient
+
+        when (skeletonModel.animationDirection) {
+            SkeletonModel.ANIMATION_DIRECTION_LTR -> {
+                val offset = width * animationFractionMove
+                xStartGradient = offset
+                yStartGradient = 0f
+                xEndGradient = offset + width
+                yEndGradient = 0f
+            }
+
+            SkeletonModel.ANIMATION_DIRECTION_RTL -> {
+                val offset = width * animationFractionMove
+                xStartGradient = offset
+                yStartGradient = 0f
+                xEndGradient = offset + width
+                yEndGradient = 0f
+            }
+
+            SkeletonModel.ANIMATION_DIRECTION_TTB -> {
+                val offset = height * animationFractionMove
+                xStartGradient = 0f
+                yStartGradient = offset
+                xEndGradient = 0f
+                yEndGradient = offset + height
+            }
+
+            SkeletonModel.ANIMATION_DIRECTION_BTT -> {
+                val offset = height * animationFractionMove
+                xStartGradient = 0f
+                yStartGradient = offset
+                xEndGradient = 0f
+                yEndGradient = offset + height
+            }
+        }
+    }
+
+
+    /**
+     * 构建渐变着色器，基准坐标为(0,0)-(width,0)/(0,height)，
+     * 动画时通过 [applyGradientShader] 的 Matrix 平移复用，不重复分配
+     */
+    private fun buildShaderGradient(): LinearGradient? {
+        if (width <= 0 || height <= 0) {
+            return null
+        }
+        val positions = floatArrayOf(0f, 0.4f, 0.8f)
+        return when (skeletonModel.animationDirection) {
+            SkeletonModel.ANIMATION_DIRECTION_TTB, SkeletonModel.ANIMATION_DIRECTION_BTT ->
+                LinearGradient(
+                    0f, 0f, 0f, height.toFloat(),
+                    gradientColors, positions, Shader.TileMode.CLAMP
+                )
+
+            else ->
+                LinearGradient(
+                    0f, 0f, width.toFloat(), 0f,
+                    gradientColors, positions, Shader.TileMode.CLAMP
+                )
+        }
+    }
+
+    private fun applyGradientShader() {
+        if (isShaderGradientDirty) {
+            shaderGradient = buildShaderGradient()
+            isShaderGradientDirty = false
+        }
+        val shader = shaderGradient ?: return
+        gradientMatrix.reset()
+        when (skeletonModel.animationDirection) {
+            SkeletonModel.ANIMATION_DIRECTION_TTB, SkeletonModel.ANIMATION_DIRECTION_BTT ->
+                gradientMatrix.setTranslate(0f, yStartGradient)
+
+            else ->
+                gradientMatrix.setTranslate(xStartGradient, 0f)
+        }
+        shader.setLocalMatrix(gradientMatrix)
+        paintGradient?.shader = shader
+    }
+
+    private fun setupInitialAnimation() {
+        if (skeletonModelsChildren != null && skeletonModelsChildren!!.size > 0) {
+            isCanDraw = true
+            isAnimationPlay = true
+            isHoldTouchEventsFromChildren = true // Enable Hold touchEvents from this and children
+        } else {
+            // SkeletonGroup no child extend from skeletonView
+            return
+        }
+
+        // Checking direction animation for generate value star and end move animation fraction
+        var valueAnimationMoveFractionStart = 0f
+        var valueAnimationMoveFractionEnd = 0f
+        when (skeletonModel.animationDirection) {
+            SkeletonModel.ANIMATION_DIRECTION_LTR -> {
+                valueAnimationMoveFractionStart = -1f
+                valueAnimationMoveFractionEnd = 1f
+            }
+
+            SkeletonModel.ANIMATION_DIRECTION_RTL -> {
+                valueAnimationMoveFractionStart = 1f
+                valueAnimationMoveFractionEnd = -1f
+            }
+
+            SkeletonModel.ANIMATION_DIRECTION_TTB -> {
+                valueAnimationMoveFractionStart = -1f
+                valueAnimationMoveFractionEnd = 1f
+            }
+
+            SkeletonModel.ANIMATION_DIRECTION_BTT -> {
+                valueAnimationMoveFractionStart = 1f
+                valueAnimationMoveFractionEnd = -1f
+            }
+        }
+        // Initial animation
+        valueAnimator =
+            ValueAnimator.ofFloat(valueAnimationMoveFractionStart, valueAnimationMoveFractionEnd)
+        valueAnimator?.setDuration(skeletonModel.animationDuration)
+        valueAnimator?.repeatCount = ValueAnimator.INFINITE
+        valueAnimator?.repeatMode = ValueAnimator.RESTART
+        valueAnimator?.addListener(mAnimatorListener)
+        valueAnimator?.addUpdateListener(mAnimatorUpdateListener)
+        valueAnimator?.start()
+        // Call start animation in listener
+        skeletonListener?.get()?.onStartAnimation()
+    }
+
+    private fun update(animation: ValueAnimator) {
+        animationFractionMove = animation.animatedValue as Float
+        animationFraction = animation.animatedFraction
+        invalidate()
+    }
+
+    private class AnimatorListener(var weakView: WeakReference<SkeletonViewGroup>) :
+        Animator.AnimatorListener {
+        override fun onAnimationStart(animation: Animator) {
+        }
+
+        override fun onAnimationEnd(animation: Animator) {
+        }
+
+        override fun onAnimationCancel(animation: Animator) {
+        }
+
+        override fun onAnimationRepeat(animation: Animator) {
+            val view = weakView.get()
+            if (view == null) {
+                animation.removeListener(this)
+            } else {
+                view.repeat()
+            }
+        }
+
+    }
+
+    private class AnimatorUpdateListener(var weakView: WeakReference<SkeletonViewGroup>) :
+        ValueAnimator.AnimatorUpdateListener {
+        override fun onAnimationUpdate(animation: ValueAnimator) {
+            val view = weakView.get()
+            if (view == null) {
+                animation.removeUpdateListener(this)
+            } else {
+                view.update(animation)
+            }
+        }
+    }
+
+    private fun repeat() {
+        if (isCanDrawFinishState) {
+            setupFinishingAnimation()
+        }
+
+
+        if (isLastLoopAnimation) {
+            // Last repeat animation and start finish animation
+            if (skeletonModel.animationFinishType == SkeletonModel.ANIMATION_TYPE_NON) {
+                setupFinishingAnimation()
+            } else {
+                isLastLoopAnimation = false
+                isCanDrawFinishState = true
+                // Change color 011 (color one transparent = 0.0 | color two transparent = 1.0 | color three transparent = 1.0 )
+                gradientColors = ColorUtils.generateColorTransparent011(
+                    skeletonModel.colorHighLight,
+                    skeletonModel.colorBackgroundViews
+                )
+                isShaderGradientDirty = true
+            }
+        }
+    }
+
+
+    private fun setupFinishingAnimation() {
+        isCanDraw = false
+        isLastLoopAnimation = false
+        isCanDrawFinishState = false
 
         // Remove animation listener
         if (valueAnimator != null) {
-            valueAnimator.removeAllListeners();
-            valueAnimator.end();
-            valueAnimator.cancel();
+            valueAnimator?.removeAllListeners()
+            valueAnimator?.end()
+            valueAnimator?.cancel()
         }
 
 
         // Disable Hold touchEvents from this and children
-        setHoldTouchEventsFromChildren(false);
+        isHoldTouchEventsFromChildren = false
+
+        // 骨架绘制关闭后重绘一次，让被跳过的子View恢复绘制
+        invalidate()
 
         // Call finish state in listener
-        if (skeletonListener != null)
-            skeletonListener.onFinishAnimation();
-
+        skeletonListener?.get()?.onFinishAnimation()
     }
 
 
-    public void startAnimation() {
+    fun startAnimation() {
         if (!isAnimationPlay) {
-            setupInitialAnimation();
+            setupInitialAnimation()
         }
     }
 
-    public void finishAnimation() {
+    fun finishAnimation() {
         if (isAnimationPlay) {
-            isLastLoopAnimation = true;
+            isLastLoopAnimation = true
         }
     }
 
-    public void setSkeletonModels(ArrayList<SkeletonModel> skeletonModels) {
-        this.skeletonModels = skeletonModels;
+    fun setSkeletonModels(skeletonModels: ArrayList<SkeletonModel>?) {
+        this.skeletonModels = skeletonModels
     }
 
-    public void setAutoPlay(boolean isAnimationAutoStart) {
-        skeletonModel.setAutoStartAnimation(isAnimationAutoStart);
+    fun setAutoPlay(isAnimationAutoStart: Boolean) {
+        skeletonModel.isAutoStartAnimation = isAnimationAutoStart
     }
 
-    public void setShowSkeleton(boolean isShowSkeleton) {
-        skeletonModel.setShowSkeleton(isShowSkeleton);
+    fun setShowSkeleton(isShowSkeleton: Boolean) {
+        skeletonModel.isShowSkeleton = isShowSkeleton
     }
 
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        finishAnimation();
-        Log.e("+++++++++", "onDetachedFromWindow" + position);
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        setupFinishingAnimation()
+    }
+
+    fun setSkeletonListener(skeletonListener: SkeletonListener?) {
+        this.skeletonListener = WeakReference(skeletonListener)
     }
 
     //==============================================================================================
     /* Listener */
-    public interface SkeletonListener {
-        void onStartAnimation();
+    interface SkeletonListener {
+        fun onStartAnimation()
 
-        void onFinishAnimation();
-    }
-
-    public void setSkeletonListener(SkeletonListener skeletonListener) {
-        this.skeletonListener = skeletonListener;
-    }
-    //==============================================================================================
+        fun onFinishAnimation()
+    } //==============================================================================================
 }

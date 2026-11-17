@@ -1,42 +1,23 @@
-package io.rmiri.skeleton;
+package io.rmiri.skeleton
 
-import android.content.Context;
-import android.os.Build;
-import androidx.annotation.AttrRes;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
-import androidx.annotation.StyleRes;
-import android.util.AttributeSet;
-
-import io.rmiri.skeleton.master.SkeletonMaster;
-
+import android.content.Context
+import android.graphics.Color
+import android.util.AttributeSet
+import android.widget.Space
+import io.rmiri.skeleton.master.SkeletonMaster
 
 /**
  * Created by Rasoul Miri on 8/8/17.
  */
-
-public class SkeletonView extends SkeletonMaster {
-
-    public SkeletonView(@NonNull Context context) {
-        super(context);
-    }
-
-    public SkeletonView(@NonNull Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-    }
-
-    public SkeletonView(@NonNull Context context, @Nullable AttributeSet attrs, @AttrRes int defStyleAttr) {
-        super(context, attrs, defStyleAttr);
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public SkeletonView(@NonNull Context context, @Nullable AttributeSet attrs, @AttrRes int defStyleAttr, @StyleRes int defStyleRes) {
-        super(context, attrs, defStyleAttr, defStyleRes);
-    }
-
-    @Override
-    protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        super.onLayout(changed, l, t, r, b);
+class SkeletonView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
+) : SkeletonMaster(context, attrs, defStyleAttr) {
+    init {
+        addView(Space(context))
+        if (isInEditMode) {
+            setBackgroundColor(Color.LTGRAY)
+        }
     }
 }
