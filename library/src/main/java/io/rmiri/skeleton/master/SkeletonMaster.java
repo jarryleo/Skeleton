@@ -116,27 +116,24 @@ public class SkeletonMaster extends RelativeLayout {
 
         CLog.i("SkeletonMaster getAllChildren " + position);
 
-        if (!(v instanceof ViewGroup)) {
-            ArrayList<View> viewArrayList = new ArrayList<View>();
-            viewArrayList.add(v);
-            return viewArrayList;
-        }
-
         ArrayList<View> result = new ArrayList<View>();
-
-        ViewGroup viewGroup = (ViewGroup) v;
-        for (int i = 0; i < viewGroup.getChildCount(); i++) {
-
-            View child = viewGroup.getChildAt(i);
-
-            ArrayList<View> viewArrayList = new ArrayList<View>();
-            viewArrayList.add(v);
-            viewArrayList.addAll(getAllChildren(child));
-
-            result.addAll(viewArrayList);
+        if (v != null) {
+            collectAllChildren(v, result);
         }
-
         return result;
+    }
+
+    // 深度优先收集 v 及其全部后代，每个 View 只加入一次。
+    // (旧实现在每个孩子分支里重复加入父节点，孩子越多父节点重复越多次，
+    //  会导致骨架模型重复绘制、布局监听器重复挂载)
+    private void collectAllChildren(View v, ArrayList<View> out) {
+        out.add(v);
+        if (v instanceof ViewGroup) {
+            ViewGroup viewGroup = (ViewGroup) v;
+            for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                collectAllChildren(viewGroup.getChildAt(i), out);
+            }
+        }
     }
 
 

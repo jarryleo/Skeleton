@@ -5,6 +5,7 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -22,6 +23,7 @@ import androidx.core.view.isVisible
 import io.rmiri.skeleton.master.SkeletonMaster
 import io.rmiri.skeleton.master.SkeletonModel
 import io.rmiri.skeleton.master.SkeletonModel.DEFAULT_COLOR_BACKGROUND_MAIN
+import io.rmiri.skeleton.utils.CLog
 import io.rmiri.skeleton.utils.ColorUtils
 import java.lang.ref.WeakReference
 import kotlin.math.abs
@@ -79,7 +81,7 @@ class SkeletonViewGroup : SkeletonMaster {
     //优化子view尺寸变化 骨架屏没有变化问题
     private val onChildLayoutChangeListener =
         OnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            if (left != oldLeft || top != oldTop || right != oldRight || oldBottom != bottom) {
+            if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
                 if (v is SkeletonView) {
                     skeletonModel(v)
                     path.reset()
@@ -88,6 +90,9 @@ class SkeletonViewGroup : SkeletonMaster {
                 }
             }
         }
+
+    // 已挂上布局监听的子 SkeletonView，重建模型列表时先摘掉旧监听，避免同一监听重复添加
+    private val hookedChildren = ArrayList<SkeletonView>()
 
     constructor(context: Context) : super(context)
 
@@ -147,6 +152,12 @@ class SkeletonViewGroup : SkeletonMaster {
             for (item in skeletonModels!!) {
                 if (item.startView != null) {
                     item.childView = item.startView
+                }
+
+                // 未设置 childView/startView 的模型无法定位，跳过以免空指针崩溃
+                if (item.childView == null) {
+                    CLog.i("SkeletonViewGroup onLayout: model without childView, skipped")
+                    continue
                 }
 
                 // Set point X1,Y1,X2,Y2
@@ -218,9 +229,16 @@ class SkeletonViewGroup : SkeletonMaster {
             // Add all children extend from SkeletonView
             skeletonModelsChildren = ArrayList()
 
+            // 先摘掉上一轮挂上的监听：View 内部用 List 存储，重复 add 会导致一次布局变化触发多次重算
+            for (child in hookedChildren) {
+                child.removeOnLayoutChangeListener(onChildLayoutChangeListener)
+            }
+            hookedChildren.clear()
+
             for (child in getAllChildren(getChildAt(0))) {
-                if (child != null && child is SkeletonView) {
+                if (child is SkeletonView) {
                     child.addOnLayoutChangeListener(onChildLayoutChangeListener)
+                    hookedChildren.add(child)
                     val item = skeletonModel(child)
                     item.childView = child
                     skeletonModelsChildren?.add(item)
@@ -242,11 +260,12 @@ class SkeletonViewGroup : SkeletonMaster {
         var Y2 = 0.0f
 
         // Calculator X1,X2 to left and top SkeletonGroup view
-        var parent = child.parent as View
-        while (parent !is SkeletonViewGroup) {
+        // parent 为空(视图已脱离层级)或遇到非 View 的 ViewParent 时终止，避免 NPE/ClassCastException
+        var parent = child.parent as? View
+        while (parent != null && parent !is SkeletonViewGroup) {
             X1 += parent.left.toFloat()
             Y1 += parent.top.toFloat()
-            parent = parent.parent as View
+            parent = parent.parent as? View
         }
 
         // Calculator padding size
@@ -292,11 +311,12 @@ class SkeletonViewGroup : SkeletonMaster {
         var Y = 0.0f
 
         // Calculator X1,Y1 to left and top SkeletonGroup view
-        var parent = view.parent as View
-        while (parent.id != parentId) {
+        // parent 为空或找不到目标 id 时终止，避免向上走到 ViewRootImpl 抛 ClassCastException/NPE
+        var parent = view.parent as? View
+        while (parent != null && parent.id != parentId) {
             X += parent.left.toFloat()
             Y += parent.top.toFloat()
-            parent = parent.parent as View
+            parent = parent.parent as? View
         }
 
         // remove padding left and top parent
@@ -312,6 +332,11 @@ class SkeletonViewGroup : SkeletonMaster {
         // 骨架激活期间子View仅作布局占位(Space/无背景容器)没有可见内容，
         // 跳过整棵子树的绘制分发，避免每帧遍历几十个View
         if (isCanDraw) {
+            // 尺寸未就绪时不创建位图(Bitmap.createBitmap 对 0 尺寸会抛异常)，本帧跳过等下次布局
+            if (width <= 0 || height <= 0) {
+                return
+            }
+
             // Just once run this code
             // Calculate bound child for draw
 
@@ -326,12 +351,23 @@ class SkeletonViewGroup : SkeletonMaster {
                 paintGradient = Paint(Paint.ANTI_ALIAS_FLAG)
                 paintGradient?.style = Paint.Style.FILL
 
-                //canvas
-                val bitmapConfig = Bitmap.Config.ALPHA_8
-                bitmapBackgroundElement = Bitmap.createBitmap(width, height, bitmapConfig)
-                canvasBackgroundElement = Canvas(bitmapBackgroundElement!!)
-                bitmapGradientElement = Bitmap.createBitmap(width, height, bitmapConfig)
-                canvasGradientElement = Canvas(bitmapGradientElement!!)
+                //canvas：尺寸没变时复用旧位图(清空重绘)，尺寸变化才回收重建，
+                //避免每次布局变化都重新分配两块全尺寸位图
+                if (bitmapBackgroundElement != null
+                    && bitmapBackgroundElement!!.width == width
+                    && bitmapBackgroundElement!!.height == height
+                ) {
+                    bitmapBackgroundElement?.eraseColor(Color.TRANSPARENT)
+                    bitmapGradientElement?.eraseColor(Color.TRANSPARENT)
+                } else {
+                    releaseSkeletonBitmaps()
+                    bitmapBackgroundElement =
+                        Bitmap.createBitmap(width, height, Bitmap.Config.ALPHA_8)
+                    canvasBackgroundElement = Canvas(bitmapBackgroundElement!!)
+                    bitmapGradientElement =
+                        Bitmap.createBitmap(width, height, Bitmap.Config.ALPHA_8)
+                    canvasGradientElement = Canvas(bitmapGradientElement!!)
+                }
 
                 for (i in skeletonModelsChildren!!.indices) {
                     val skeletonAttributeChild = skeletonModelsChildren!![i]
@@ -429,10 +465,12 @@ class SkeletonViewGroup : SkeletonMaster {
                     }
 
 
-                    // Draw bitmap on canvas
-                    canvasBackgroundElement?.drawPath(path, paintBackgroundViews!!)
-                    canvasGradientElement?.drawPath(path, paintBackgroundViews!!)
                 }
+
+                // Draw bitmap on canvas：循环结束后一次性绘制累积的 path，
+                // 替代原先每轮循环都把已绘内容重复叠加一遍的 O(n²) 画法
+                canvasBackgroundElement?.drawPath(path, paintBackgroundViews!!)
+                canvasGradientElement?.drawPath(path, paintBackgroundViews!!)
             }
 
 
@@ -510,6 +548,20 @@ class SkeletonViewGroup : SkeletonMaster {
         } else {
             super.dispatchDraw(canvas)
         }
+    }
+
+    /**
+     * 回收并清空两块全尺寸 ALPHA_8 位图及其画布。
+     * 每块位图各占 width*height 字节，骨架收尾、尺寸变化重建、脱离窗口时都应释放，
+     * 否则会随 View 一起长期存活(RecyclerView 场景下累积可观)。
+     */
+    private fun releaseSkeletonBitmaps() {
+        bitmapBackgroundElement?.recycle()
+        bitmapBackgroundElement = null
+        canvasBackgroundElement = null
+        bitmapGradientElement?.recycle()
+        bitmapGradientElement = null
+        canvasGradientElement = null
     }
 
 
@@ -663,14 +715,30 @@ class SkeletonViewGroup : SkeletonMaster {
     }
 
     private fun setupInitialAnimation() {
+        // 先结束可能仍在运行的旧动画(如布局变化导致 autoStart 再次触发)，
+        // 否则两个无限循环的 ValueAnimator 会同时驱动同一视图
+        valueAnimator?.removeAllListeners()
+        valueAnimator?.cancel()
+
         if (skeletonModelsChildren != null && skeletonModelsChildren!!.size > 0) {
             isCanDraw = true
             isAnimationPlay = true
             isHoldTouchEventsFromChildren = true // Enable Hold touchEvents from this and children
         } else {
             // SkeletonGroup no child extend from skeletonView
+            // 子模型已清空时关闭骨架绘制并释放位图，避免残留的旧骨架继续覆盖内容
+            isCanDraw = false
+            releaseSkeletonBitmaps()
             return
         }
+
+        // 上一次收尾时 gradientColors 已切到 011，重启时需恢复 010，
+        // 否则重启后的高亮渐变不正确
+        gradientColors = ColorUtils.generateColorTransparent010(
+            skeletonModel.colorHighLight,
+            skeletonModel.colorBackgroundViews
+        )
+        isShaderGradientDirty = true
 
         // Checking direction animation for generate value star and end move animation fraction
         var valueAnimationMoveFractionStart = 0f
@@ -774,6 +842,7 @@ class SkeletonViewGroup : SkeletonMaster {
 
 
     private fun setupFinishingAnimation() {
+        isAnimationPlay = false // Kotlin 转换时丢失的原 Java 修复：收尾后允许 startAnimation() 重新启动
         isCanDraw = false
         isLastLoopAnimation = false
         isCanDrawFinishState = false
@@ -784,7 +853,15 @@ class SkeletonViewGroup : SkeletonMaster {
             valueAnimator?.end()
             valueAnimator?.cancel()
         }
+        valueAnimator = null
 
+        // 骨架结束后释放两块全尺寸位图与画笔，等待下次 startAnimation() 时重建
+        releaseSkeletonBitmaps()
+        path.reset()
+        paintGradient = null
+        paintBackgroundViews = null
+        shaderGradient = null
+        isShaderGradientDirty = true
 
         // Disable Hold touchEvents from this and children
         isHoldTouchEventsFromChildren = false
@@ -823,7 +900,13 @@ class SkeletonViewGroup : SkeletonMaster {
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        setupFinishingAnimation()
+        if (isAnimationPlay) {
+            // 视图离屏时立即停掉无限循环的 ValueAnimator 并释放资源，
+            // 否则动画会在后台空转直到下一轮 repeat 才自行结束
+            setupFinishingAnimation()
+        } else {
+            releaseSkeletonBitmaps()
+        }
     }
 
     fun setSkeletonListener(skeletonListener: SkeletonListener?) {
