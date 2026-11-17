@@ -1,6 +1,6 @@
 # Skeleton Android
 
-Android library (`:library`) that draws shimmer/skeleton loading animations over any view, published via JitPack as `com.github.rasoulmiri:Skeleton`. `:sample` is the demo app. All code is Java; Gradle files use Groovy DSL.
+Android library (`:library`) that draws shimmer/skeleton loading animations over any view, published via JitPack as `com.github.jarryleo:Skeleton` (fork of the unmaintained `rasoulmiri/Skeleton`). `:sample` is the demo app. All code is Java; Gradle files use Groovy DSL.
 
 ## Build commands
 
@@ -24,7 +24,7 @@ Android library (`:library`) that draws shimmer/skeleton loading animations over
 
 ## JitPack publishing
 
-- `library/build.gradle` applies `maven-publish`. `android { publishing { singleVariant('release') { withSourcesJar() } } }` registers the SoftwareComponent — AGP ≥7.1 requires this or `components.release` does not exist — and an `afterEvaluate` block consumes it with coordinates `com.github.rasoulmiri:Skeleton`; JitPack rewrites the version to the git tag.
+- `library/build.gradle` applies `maven-publish`. `android { publishing { singleVariant('release') { withSourcesJar() } } }` registers the SoftwareComponent — AGP ≥7.1 requires this or `components.release` does not exist — and an `afterEvaluate` block consumes it with coordinates `com.github.jarryleo:Skeleton`; JitPack rewrites the version to the git tag.
 - `jitpack.yml` pins `jdk: openjdk17` (JitPack defaults to an older JDK that cannot run AGP 9) and runs `./gradlew :library:publishToMavenLocal`.
 - Release flow: commit → tag (e.g. `1.2.0`) → push → watch the first build on jitpack.io.
 - `local.properties` is git-ignored and untracked; keep it that way — a committed machine-specific SDK path breaks JitPack builds.

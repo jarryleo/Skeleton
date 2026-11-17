@@ -1,16 +1,17 @@
 # Skeleton Android
 Simple yet powerful skeleton animation for all view in android 
 <br/>
-[![](https://jitpack.io/v/rasoulmiri/skeleton.svg)](https://jitpack.io/#rasoulmiri/skeleton)
-[![Android Arsenal](https://img.shields.io/badge/Android%20Arsenal-Skeleton-orange.svg?style=flat)](https://android-arsenal.com/details/1/6120)
+[![](https://jitpack.io/v/jarryleo/Skeleton.svg)](https://jitpack.io/#jarryleo/Skeleton)
 Minimum API 24
 <br/><br/>
-![alt tag](https://github.com/rasoulmiri/Skeleton/blob/master/demoFile/1.gif)
+![alt tag](https://github.com/jarryleo/Skeleton/blob/master/demoFile/1.gif)
 <br/><br/>
-See [demo project](https://github.com/rasoulmiri/Skeleton/tree/master/sample)
+See [demo project](https://github.com/jarryleo/Skeleton/tree/master/sample)
 <br/>
-See [demo APK](https://github.com/rasoulmiri/Skeleton/blob/master/demoFile/sample.apk)
+See [demo APK](https://github.com/jarryleo/Skeleton/blob/master/demoFile/sample.apk)
 <br/>
+
+> Fork of [rasoulmiri/Skeleton](https://github.com/rasoulmiri/Skeleton) (no longer maintained), maintained and published here as `com.github.jarryleo:Skeleton`.
 
 ## Setup :
 
@@ -26,7 +27,7 @@ Add JitPack repository in your root build.gradle at the end of repositories.
 Add dependency in your app level build.gradle.
 
     dependencies {
-	      implementation 'com.github.rasoulmiri:Skeleton:1.1.5'
+	      implementation 'com.github.jarryleo:Skeleton:1.2.0'
 	}
 
 
@@ -308,7 +309,7 @@ skeletonGroup.setSkeletonListener(new SkeletonGroup.SkeletonListener() {
 ```
 
 
-for use in RecyclerView and Adapter See sample 1 activity in [this project](https://github.com/rasoulmiri/Skeleton/tree/master/sample)
+for use in RecyclerView and Adapter See sample 1 activity in [this project](https://github.com/jarryleo/Skeleton/tree/master/sample)
 <br/>
 
 ## Contributing

@@ -37,15 +37,15 @@ dependencies {
 }
 
 // Publishing: JitPack runs `./gradlew :library:publishToMavenLocal` (see
-// jitpack.yml) and republishes the result as com.github.rasoulmiri:Skeleton:<git-tag>.
+// jitpack.yml) and republishes the result as com.github.jarryleo:Skeleton:<git-tag>.
 afterEvaluate {
     publishing {
         publications {
             release(MavenPublication) {
                 from components.release
-                groupId = 'com.github.rasoulmiri'
+                groupId = 'com.github.jarryleo'
                 artifactId = 'Skeleton'
-                version = '1.1.5'
+                version = '1.2.0'
             }
         }
     }
