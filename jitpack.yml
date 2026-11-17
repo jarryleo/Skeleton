@@ -1,0 +1,7 @@
+# JitPack build configuration: https://jitpack.io/config
+# AGP 9 requires JDK 17+.
+jdk:
+  - openjdk17
+
+install:
+  - ./gradlew :library:publishToMavenLocal

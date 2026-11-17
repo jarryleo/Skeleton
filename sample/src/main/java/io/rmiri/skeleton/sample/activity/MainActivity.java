@@ -2,8 +2,8 @@ package io.rmiri.skeleton.sample.activity;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.AppCompatButton;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatButton;
 import android.view.View;
 
 import io.rmiri.skeleton.sample.R;
@@ -47,28 +47,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.sampleGradientXmlBtn:
-                startActivity(new Intent(this, GradientXmlActivity.class));
-                break;
-            case R.id.sampleFadeXml1Btn:
-                startActivity(new Intent(this, Fade1XmlActivity.class));
-                break;
-            case R.id.sampleFadeXml2Btn:
-                startActivity(new Intent(this, FadeXml2Activity.class));
-                break;
-            case R.id.sampleShapeXmlBtn:
-                startActivity(new Intent(this, ShapeXmlActivity.class));
-                break;
-            case R.id.sampleAutoItemsCountXmlBtn:
-                startActivity(new Intent(this, AutoItemsCountXmlActivity.class));
-                break;
-            case R.id.sampleGradientJavaBtn:
-                startActivity(new Intent(this, GradientJavaActivity.class));
-                break;
-            case R.id.sampleAddViewsByJavaBtn:
-                startActivity(new Intent(this, AddViewsByJavaActivity.class));
-                break;
+        // R fields are not compile-time constants under AGP 9, so no switch on ids
+        int id = view.getId();
+        if (id == R.id.sampleGradientXmlBtn) {
+            startActivity(new Intent(this, GradientXmlActivity.class));
+        } else if (id == R.id.sampleFadeXml1Btn) {
+            startActivity(new Intent(this, Fade1XmlActivity.class));
+        } else if (id == R.id.sampleFadeXml2Btn) {
+            startActivity(new Intent(this, FadeXml2Activity.class));
+        } else if (id == R.id.sampleShapeXmlBtn) {
+            startActivity(new Intent(this, ShapeXmlActivity.class));
+        } else if (id == R.id.sampleAutoItemsCountXmlBtn) {
+            startActivity(new Intent(this, AutoItemsCountXmlActivity.class));
+        } else if (id == R.id.sampleGradientJavaBtn) {
+            startActivity(new Intent(this, GradientJavaActivity.class));
+        } else if (id == R.id.sampleAddViewsByJavaBtn) {
+            startActivity(new Intent(this, AddViewsByJavaActivity.class));
         }
     }
 }

@@ -3,7 +3,7 @@ Simple yet powerful skeleton animation for all view in android
 <br/>
 [![](https://jitpack.io/v/rasoulmiri/skeleton.svg)](https://jitpack.io/#rasoulmiri/skeleton)
 [![Android Arsenal](https://img.shields.io/badge/Android%20Arsenal-Skeleton-orange.svg?style=flat)](https://android-arsenal.com/details/1/6120)
-Minimum API 17
+Minimum API 24
 <br/><br/>
 ![alt tag](https://github.com/rasoulmiri/Skeleton/blob/master/demoFile/1.gif)
 <br/><br/>
@@ -26,7 +26,7 @@ Add JitPack repository in your root build.gradle at the end of repositories.
 Add dependency in your app level build.gradle.
 
     dependencies {
-	      compile 'com.github.rasoulmiri:Skeleton:v1.1.4'
+	      implementation 'com.github.rasoulmiri:Skeleton:1.1.5'
 	}
 
 
@@ -58,7 +58,7 @@ use SkeletonGroup and SkeletonView in layout
 ```
 Example:
 ```xml
-<android.support.v7.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:Skeleton="http://schemas.android.com/apk/res-auto"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -94,7 +94,7 @@ Example:
                 Skeleton:SK_padding="0dp"
                 Skeleton:SK_shapeType="rect">
 
-                <android.support.v7.widget.AppCompatImageView
+                <androidx.appcompat.widget.AppCompatImageView
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:scaleType="centerCrop"
@@ -119,7 +119,7 @@ Example:
             </io.rmiri.skeleton.SkeletonView>
         </RelativeLayout>
     </io.rmiri.skeleton.SkeletonGroup>
-</android.support.v7.widget.CardView>
+</androidx.cardview.widget.CardView>
 ```
 #### Final step
 

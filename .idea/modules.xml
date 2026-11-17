@@ -2,10 +2,15 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/Skeleton.iml" filepath="$PROJECT_DIR$/Skeleton.iml" />
-      <module fileurl="file://$PROJECT_DIR$/SkeletonJava.iml" filepath="$PROJECT_DIR$/SkeletonJava.iml" />
-      <module fileurl="file://$PROJECT_DIR$/library/library.iml" filepath="$PROJECT_DIR$/library/library.iml" />
-      <module fileurl="file://$PROJECT_DIR$/sample/sample.iml" filepath="$PROJECT_DIR$/sample/sample.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Skeleton.iml" filepath="$PROJECT_DIR$/.idea/Skeleton.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/library/Skeleton.library.iml" filepath="$PROJECT_DIR$/.idea/modules/library/Skeleton.library.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/library/Skeleton.library.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/library/Skeleton.library.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/library/Skeleton.library.main.iml" filepath="$PROJECT_DIR$/.idea/modules/library/Skeleton.library.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/library/Skeleton.library.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/library/Skeleton.library.unitTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/sample/Skeleton.sample.iml" filepath="$PROJECT_DIR$/.idea/modules/sample/Skeleton.sample.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/sample/Skeleton.sample.androidTest.iml" filepath="$PROJECT_DIR$/.idea/modules/sample/Skeleton.sample.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/sample/Skeleton.sample.main.iml" filepath="$PROJECT_DIR$/.idea/modules/sample/Skeleton.sample.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/sample/Skeleton.sample.unitTest.iml" filepath="$PROJECT_DIR$/.idea/modules/sample/Skeleton.sample.unitTest.iml" />
     </modules>
   </component>
 </project>
